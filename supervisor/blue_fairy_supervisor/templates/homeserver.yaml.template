@@ -1,0 +1,61 @@
+# Synapse homeserver configuration
+server_name: "blue-fairy.local"
+pid_file: /data/homeserver.pid
+report_stats: false
+
+signing_key_path: /data/blue-fairy.local.signing.key
+
+listeners:
+  - port: 8008
+    tls: false
+    type: http
+    x_forwarded: true
+    resources:
+      - names: [client, federation]
+        compress: false
+
+database:
+  name: sqlite3
+  args:
+    database: /data/homeserver.db
+
+log_config: /config/log_config.yaml
+
+media_store_path: /data/media_store
+uploads_path: /data/uploads
+
+registration_shared_secret: "{registration_secret}"
+enable_registration: false
+enable_registration_without_verification: false
+
+suppress_key_server_warning: true
+trusted_key_servers: []
+
+# Disable rate limiting for development/testing
+rc_registration:
+  per_second: 100
+  burst_count: 100
+rc_login:
+  address:
+    per_second: 100
+    burst_count: 100
+  account:
+    per_second: 100
+    burst_count: 100
+  failed_attempts:
+    per_second: 100
+    burst_count: 100
+rc_joins:
+  local:
+    per_second: 100
+    burst_count: 100
+  remote:
+    per_second: 100
+    burst_count: 100
+rc_invites:
+  per_room:
+    per_second: 100
+    burst_count: 100
+  per_user:
+    per_second: 100
+    burst_count: 100

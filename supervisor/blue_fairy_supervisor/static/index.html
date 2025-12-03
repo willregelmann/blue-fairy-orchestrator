@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blue Fairy - Observability</title>
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <style>
+        :root {
+            --bg-primary: #1a1a2e;
+            --bg-secondary: #16213e;
+            --bg-tertiary: #0f3460;
+            --text-primary: #eaeaea;
+            --text-secondary: #a0a0a0;
+            --accent: #e94560;
+            --decision: #4a9eff;
+            --communication: #4ade80;
+            --memory: #facc15;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 0;
+            border-bottom: 1px solid var(--bg-tertiary);
+            margin-bottom: 20px;
+        }
+
+        header h1 {
+            font-size: 1.5rem;
+            color: var(--accent);
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+        }
+
+        .tab {
+            padding: 10px 20px;
+            background: var(--bg-secondary);
+            border: none;
+            border-radius: 8px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+
+        .tab:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .tab.active {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        select {
+            padding: 10px 15px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--bg-tertiary);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            min-width: 200px;
+        }
+
+        select:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .filters {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .filter-label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            cursor: pointer;
+        }
+
+        .filter-label input {
+            accent-color: var(--accent);
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .badge-decision { background: var(--decision); color: #000; }
+        .badge-communication { background: var(--communication); color: #000; }
+        .badge-memory_retrieval { background: var(--memory); color: #000; }
+
+        .timeline {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .event {
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            padding: 15px;
+            border-left: 3px solid var(--bg-tertiary);
+        }
+
+        .event-decision { border-left-color: var(--decision); }
+        .event-communication { border-left-color: var(--communication); }
+        .event-memory_retrieval { border-left-color: var(--memory); }
+
+        .event-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .event-time {
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .event-summary {
+            font-size: 0.9rem;
+            color: var(--text-primary);
+        }
+
+        .event-details {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid var(--bg-tertiary);
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .event-details dt {
+            color: var(--text-secondary);
+            margin-top: 8px;
+        }
+
+        .event-details dd {
+            color: var(--text-primary);
+            margin-left: 15px;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .messages {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .message {
+            max-width: 80%;
+            padding: 12px 15px;
+            border-radius: 12px;
+            background: var(--bg-secondary);
+        }
+
+        .message-other {
+            align-self: flex-start;
+            border-bottom-left-radius: 4px;
+        }
+
+        .message-self {
+            align-self: flex-end;
+            background: var(--bg-tertiary);
+            border-bottom-right-radius: 4px;
+        }
+
+        .message-header {
+            display: flex;
+            justify-content: space-between;
+            gap: 15px;
+            margin-bottom: 8px;
+            font-size: 0.8rem;
+        }
+
+        .message-sender {
+            color: var(--accent);
+            font-weight: 600;
+        }
+
+        .message-time {
+            color: var(--text-secondary);
+        }
+
+        .message-content {
+            font-size: 0.9rem;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-secondary);
+        }
+
+        .error {
+            background: #4a1515;
+            border: 1px solid #7a2020;
+            padding: 15px;
+            border-radius: 8px;
+            color: #ff8080;
+        }
+
+        .empty {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-secondary);
+        }
+
+        .auto-refresh {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .refresh-btn {
+            padding: 8px 15px;
+            background: var(--bg-tertiary);
+            border: none;
+            border-radius: 6px;
+            color: var(--text-primary);
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+
+        .refresh-btn:hover {
+            background: var(--accent);
+        }
+    </style>
+</head>
+<body>
+    <div class="container" x-data="app()">
+        <header>
+            <h1>Blue Fairy</h1>
+            <div class="tabs">
+                <button class="tab" :class="{ active: tab === 'timeline' }" @click="tab = 'timeline'">Timeline</button>
+                <button class="tab" :class="{ active: tab === 'rooms' }" @click="tab = 'rooms'">Rooms</button>
+            </div>
+        </header>
+
+        <!-- Timeline Tab -->
+        <div x-show="tab === 'timeline'">
+            <div class="controls">
+                <select x-model="selectedAgent" @change="loadTimeline()">
+                    <option value="">Select agent...</option>
+                    <template x-for="agent in agents" :key="agent.agent_id">
+                        <option :value="agent.agent_id" x-text="`${agent.name || agent.agent_id} (${agent.status})`"></option>
+                    </template>
+                </select>
+
+                <div class="filters">
+                    <label class="filter-label">
+                        <input type="checkbox" x-model="filters.decision" @change="loadTimeline()"> Decisions
+                    </label>
+                    <label class="filter-label">
+                        <input type="checkbox" x-model="filters.communication" @change="loadTimeline()"> Communications
+                    </label>
+                    <label class="filter-label">
+                        <input type="checkbox" x-model="filters.memory_retrieval" @change="loadTimeline()"> Memory
+                    </label>
+                </div>
+
+                <button class="refresh-btn" @click="loadTimeline()">Refresh</button>
+
+                <label class="auto-refresh">
+                    <input type="checkbox" x-model="autoRefresh"> Auto-refresh
+                </label>
+            </div>
+
+            <div x-show="loading" class="loading">Loading...</div>
+            <div x-show="error" class="error" x-text="error"></div>
+
+            <div x-show="!loading && !error && selectedAgent" class="timeline">
+                <template x-if="timeline.length === 0">
+                    <div class="empty">No events found</div>
+                </template>
+                <template x-for="event in timeline" :key="event.event_id">
+                    <div class="event" :class="`event-${event.event_type}`">
+                        <div class="event-header">
+                            <span class="event-time" x-text="formatTime(event.timestamp)"></span>
+                            <span class="badge" :class="`badge-${event.event_type}`" x-text="event.event_type"></span>
+                            <span class="event-summary" x-text="getEventSummary(event)"></span>
+                        </div>
+                        <dl class="event-details" x-show="event.expanded" x-data="{ expanded: false }">
+                            <template x-for="[key, value] in Object.entries(event.data || {})" :key="key">
+                                <div>
+                                    <dt x-text="key"></dt>
+                                    <dd x-text="typeof value === 'object' ? JSON.stringify(value, null, 2) : value"></dd>
+                                </div>
+                            </template>
+                        </dl>
+                        <button
+                            style="margin-top: 8px; font-size: 0.8rem; color: var(--text-secondary); background: none; border: none; cursor: pointer;"
+                            @click="event.expanded = !event.expanded"
+                            x-text="event.expanded ? 'Hide details' : 'Show details'"
+                        ></button>
+                    </div>
+                </template>
+            </div>
+        </div>
+
+        <!-- Rooms Tab -->
+        <div x-show="tab === 'rooms'">
+            <div class="controls">
+                <select x-model="selectedRoom" @change="loadMessages()">
+                    <option value="">Select room...</option>
+                    <template x-for="room in rooms" :key="room.room_id">
+                        <option :value="room.room_alias || room.room_id" x-text="room.room_name"></option>
+                    </template>
+                </select>
+
+                <button class="refresh-btn" @click="loadMessages()">Refresh</button>
+            </div>
+
+            <div x-show="loadingMessages" class="loading">Loading...</div>
+            <div x-show="messagesError" class="error" x-text="messagesError"></div>
+
+            <div x-show="!loadingMessages && !messagesError && selectedRoom" class="messages">
+                <template x-if="messages.length === 0">
+                    <div class="empty">No messages in this room</div>
+                </template>
+                <template x-for="msg in messages" :key="msg.event_id">
+                    <div class="message" :class="msg.sender.includes(selectedAgent) ? 'message-self' : 'message-other'">
+                        <div class="message-header">
+                            <span class="message-sender" x-text="msg.sender.split(':')[0].substring(1)"></span>
+                            <span class="message-time" x-text="formatTimestamp(msg.timestamp)"></span>
+                        </div>
+                        <div class="message-content" x-text="msg.content"></div>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function app() {
+            return {
+                tab: 'timeline',
+
+                // Agents & Timeline
+                agents: [],
+                selectedAgent: '',
+                timeline: [],
+                loading: false,
+                error: null,
+                filters: {
+                    decision: true,
+                    communication: true,
+                    memory_retrieval: true
+                },
+                autoRefresh: false,
+                refreshInterval: null,
+
+                // Rooms & Messages
+                rooms: [],
+                selectedRoom: '',
+                messages: [],
+                loadingMessages: false,
+                messagesError: null,
+
+                async init() {
+                    await this.loadAgents();
+                    await this.loadRooms();
+
+                    // Auto-refresh watcher
+                    this.$watch('autoRefresh', (value) => {
+                        if (value) {
+                            this.refreshInterval = setInterval(() => {
+                                if (this.tab === 'timeline' && this.selectedAgent) {
+                                    this.loadTimeline();
+                                } else if (this.tab === 'rooms' && this.selectedRoom) {
+                                    this.loadMessages();
+                                }
+                            }, 5000);
+                        } else if (this.refreshInterval) {
+                            clearInterval(this.refreshInterval);
+                        }
+                    });
+                },
+
+                async loadAgents() {
+                    try {
+                        const res = await fetch('/agents');
+                        const data = await res.json();
+                        this.agents = data.agents || [];
+                    } catch (e) {
+                        console.error('Failed to load agents:', e);
+                    }
+                },
+
+                async loadRooms() {
+                    try {
+                        const res = await fetch('/rooms');
+                        const data = await res.json();
+                        this.rooms = data.rooms || [];
+                    } catch (e) {
+                        console.error('Failed to load rooms:', e);
+                    }
+                },
+
+                async loadTimeline() {
+                    if (!this.selectedAgent) return;
+
+                    this.loading = true;
+                    this.error = null;
+
+                    try {
+                        const types = Object.entries(this.filters)
+                            .filter(([_, v]) => v)
+                            .map(([k]) => k)
+                            .join(',');
+
+                        const url = `/timeline/${this.selectedAgent}?event_types=${types}&limit=100`;
+                        const res = await fetch(url);
+                        const data = await res.json();
+
+                        if (data.error) {
+                            this.error = data.error;
+                        } else {
+                            this.timeline = (data.timeline || []).map(e => ({...e, expanded: false}));
+                        }
+                    } catch (e) {
+                        this.error = 'Failed to load timeline: ' + e.message;
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+
+                async loadMessages() {
+                    if (!this.selectedRoom) return;
+
+                    this.loadingMessages = true;
+                    this.messagesError = null;
+
+                    try {
+                        const encoded = encodeURIComponent(this.selectedRoom);
+                        const res = await fetch(`/rooms/${encoded}/messages?limit=100`);
+                        const data = await res.json();
+
+                        if (data.error) {
+                            this.messagesError = data.error;
+                        } else {
+                            this.messages = data.messages || [];
+                        }
+                    } catch (e) {
+                        this.messagesError = 'Failed to load messages: ' + e.message;
+                    } finally {
+                        this.loadingMessages = false;
+                    }
+                },
+
+                formatTime(timestamp) {
+                    if (!timestamp) return '';
+                    // Handle "YYYY-MM-DD HH:MM:SS" format
+                    const parts = timestamp.split(' ');
+                    return parts[1] || timestamp;
+                },
+
+                formatTimestamp(ts) {
+                    if (!ts) return '';
+                    // Handle Unix timestamp (milliseconds)
+                    const date = new Date(ts);
+                    return date.toLocaleTimeString();
+                },
+
+                getEventSummary(event) {
+                    const data = event.data || {};
+                    switch (event.event_type) {
+                        case 'decision':
+                            return `${data.decision || 'decided'} in ${data.room_name || 'room'}`;
+                        case 'communication':
+                            return `${data.direction || 'sent'} to ${data.room_name || 'room'}`;
+                        case 'memory_retrieval':
+                            return `Retrieved ${data.results_count || 0} memories`;
+                        default:
+                            return event.event_type;
+                    }
+                }
+            };
+        }
+    </script>
+</body>
+</html>
