@@ -277,6 +277,10 @@ class AgentRuntimeConfig(BaseModel):
     subroutines_config: Optional[dict] = None  # Serialized SubroutinesConfig
     mcp_servers: Optional[dict[str, dict]] = None  # Serialized McpServerConfig
     plugins: list[PluginConfig] = Field(default_factory=list)  # Plugin configurations
+    wake_interval_seconds: int = Field(
+        default=60,
+        description="Wake cycle interval in seconds"
+    )
 
 
 class Config(BaseModel):
