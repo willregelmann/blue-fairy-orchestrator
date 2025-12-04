@@ -325,6 +325,46 @@ class BlueFairyMCPServer:
                         },
                         "required": ["agent_id", "commit_sha"]
                     }
+                ),
+                Tool(
+                    name="queue_summary",
+                    description="Get summary of agent's event queue. Returns total count and counts by source. Used by agents during wake cycles.",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "agent_id": {
+                                "type": "string",
+                                "description": "Agent identifier"
+                            }
+                        },
+                        "required": ["agent_id"]
+                    }
+                ),
+                Tool(
+                    name="queue_read",
+                    description="Read and remove items from agent's event queue. Items are popped (destructive read). Used by agents to consume events during wake cycles.",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "agent_id": {
+                                "type": "string",
+                                "description": "Agent identifier"
+                            },
+                            "limit": {
+                                "type": "integer",
+                                "description": "Maximum items to return (default: all)"
+                            },
+                            "oldest_first": {
+                                "type": "boolean",
+                                "description": "Return oldest items first (default: true)"
+                            },
+                            "source": {
+                                "type": "string",
+                                "description": "Filter by source (e.g., 'chat.matrix')"
+                            }
+                        },
+                        "required": ["agent_id"]
+                    }
                 )
             ]
 
@@ -363,6 +403,10 @@ class BlueFairyMCPServer:
                 return await self._handle_get_self_version(arguments)
             elif name == "request_upgrade":
                 return await self._handle_request_upgrade(arguments)
+            elif name == "queue_summary":
+                return await self._handle_queue_summary(arguments)
+            elif name == "queue_read":
+                return await self._handle_queue_read(arguments)
             else:
                 raise ValueError(f"Unknown tool: {name}")
 
@@ -1055,6 +1099,82 @@ class BlueFairyMCPServer:
         )
 
         return result
+
+    async def _handle_queue_summary(self, arguments: dict) -> list[TextContent]:
+        """Handle queue_summary tool call.
+
+        Args:
+            arguments: Dict with agent_id
+
+        Returns:
+            List containing single TextContent with queue summary
+        """
+        agent_id = arguments.get("agent_id")
+
+        if not agent_id:
+            return [TextContent(
+                type="text",
+                text=json.dumps({"error": "agent_id is required"})
+            )]
+
+        agent = self.state_manager.get_agent(agent_id)
+        if not agent:
+            return [TextContent(
+                type="text",
+                text=json.dumps({"error": f"Agent '{agent_id}' not found"})
+            )]
+
+        summary = self.state_manager.get_queue_summary(agent_id)
+
+        return [TextContent(
+            type="text",
+            text=json.dumps(summary, indent=2)
+        )]
+
+    async def _handle_queue_read(self, arguments: dict) -> list[TextContent]:
+        """Handle queue_read tool call.
+
+        Args:
+            arguments: Dict with agent_id and optional filters
+
+        Returns:
+            List containing single TextContent with popped items
+        """
+        agent_id = arguments.get("agent_id")
+        limit = arguments.get("limit")
+        oldest_first = arguments.get("oldest_first", True)
+        source = arguments.get("source")
+
+        if not agent_id:
+            return [TextContent(
+                type="text",
+                text=json.dumps({"error": "agent_id is required"})
+            )]
+
+        agent = self.state_manager.get_agent(agent_id)
+        if not agent:
+            return [TextContent(
+                type="text",
+                text=json.dumps({"error": f"Agent '{agent_id}' not found"})
+            )]
+
+        items = self.state_manager.pop_queue_items(
+            agent_id=agent_id,
+            limit=limit,
+            oldest_first=oldest_first,
+            source=source
+        )
+
+        response = {
+            "agent_id": agent_id,
+            "items": items,
+            "count": len(items)
+        }
+
+        return [TextContent(
+            type="text",
+            text=json.dumps(response, indent=2)
+        )]
 
     async def run(self):
         """Run the MCP server with stdio transport."""
