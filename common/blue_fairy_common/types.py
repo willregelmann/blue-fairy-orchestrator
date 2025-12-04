@@ -252,6 +252,10 @@ class AgentTemplate(BaseModel):
         description="External MCP servers for agent tool access"
     )
     plugins: list[PluginConfig] = Field(default_factory=list)
+    wake_interval: str = Field(
+        default="60s",
+        description="Wake cycle interval (e.g., '30s', '5m'). Agent wakes periodically to check event queue."
+    )
 
 
 class AgentRuntimeConfig(BaseModel):
