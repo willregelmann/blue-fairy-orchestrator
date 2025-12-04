@@ -36,6 +36,12 @@ class TelemetryEvent(BaseModel):
     data: Dict[str, Any]
 
 
+class QueuePushRequest(BaseModel):
+    """Request to push event to agent queue"""
+    source: str
+    summary: str
+
+
 class SupervisorAPI:
     """Supervisor JSON-RPC API handlers"""
 
@@ -545,6 +551,25 @@ def create_app(
 
         except Exception as e:
             return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
+
+    # Queue management endpoints
+    @app.post("/agents/{agent_id}/queue")
+    async def push_queue_item(agent_id: str, request: QueuePushRequest):
+        """Push an event to agent's queue.
+
+        Used by plugins/listeners to queue events for agent processing.
+        """
+        agent = state.get_agent(agent_id)
+        if not agent:
+            raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
+
+        item_id = state.push_queue_item(
+            agent_id=agent_id,
+            source=request.source,
+            summary=request.summary
+        )
+
+        return {"id": item_id, "status": "queued"}
 
     # ==================== REST API for Web UI ====================
 
