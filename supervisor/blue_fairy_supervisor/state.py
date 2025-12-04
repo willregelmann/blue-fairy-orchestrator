@@ -3,6 +3,7 @@
 import json
 import sqlite3
 import time
+import uuid
 from pathlib import Path
 from typing import Optional
 from dataclasses import dataclass
@@ -165,6 +166,26 @@ class StateManager:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (agent_id) REFERENCES agents(agent_id) ON DELETE CASCADE
             )
+        """)
+
+        # Agent event queue table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS agent_queue (
+                id TEXT PRIMARY KEY,
+                agent_id TEXT NOT NULL,
+                source TEXT NOT NULL,
+                summary TEXT NOT NULL,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (agent_id) REFERENCES agents(agent_id) ON DELETE CASCADE
+            )
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_agent_queue_agent
+            ON agent_queue(agent_id)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_agent_queue_timestamp
+            ON agent_queue(agent_id, timestamp)
         """)
 
         self.conn.commit()
@@ -838,6 +859,126 @@ class StateManager:
             (agent_id,)
         )
         self.conn.commit()
+
+    def push_queue_item(
+        self,
+        agent_id: str,
+        source: str,
+        summary: str
+    ) -> str:
+        """Push an event to agent's queue.
+
+        Args:
+            agent_id: Agent identifier
+            source: Event source (e.g., "chat.matrix", "system")
+            summary: Human-readable summary
+
+        Returns:
+            Generated item ID
+        """
+        item_id = str(uuid.uuid4())
+        cursor = self.conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO agent_queue (id, agent_id, source, summary)
+            VALUES (?, ?, ?, ?)
+            """,
+            (item_id, agent_id, source, summary)
+        )
+        self.conn.commit()
+        return item_id
+
+    def get_queue_summary(self, agent_id: str) -> dict:
+        """Get summary of agent's queue.
+
+        Args:
+            agent_id: Agent identifier
+
+        Returns:
+            Dict with total count and counts by source
+        """
+        cursor = self.conn.cursor()
+
+        # Get total
+        cursor.execute(
+            "SELECT COUNT(*) FROM agent_queue WHERE agent_id = ?",
+            (agent_id,)
+        )
+        total = cursor.fetchone()[0]
+
+        # Get counts by source
+        cursor.execute(
+            """
+            SELECT source, COUNT(*) as count
+            FROM agent_queue
+            WHERE agent_id = ?
+            GROUP BY source
+            """,
+            (agent_id,)
+        )
+        by_source = {row[0]: row[1] for row in cursor.fetchall()}
+
+        return {"total": total, "by_source": by_source}
+
+    def pop_queue_items(
+        self,
+        agent_id: str,
+        limit: int | None = None,
+        oldest_first: bool = True,
+        source: str | None = None
+    ) -> list[dict]:
+        """Pop items from agent's queue (destructive read).
+
+        Args:
+            agent_id: Agent identifier
+            limit: Max items to return (None = all)
+            oldest_first: If True, return oldest items first
+            source: Filter by source (None = all sources)
+
+        Returns:
+            List of queue items (removed from queue)
+        """
+        cursor = self.conn.cursor()
+
+        # Build query
+        query = "SELECT id, source, summary, timestamp FROM agent_queue WHERE agent_id = ?"
+        params = [agent_id]
+
+        if source:
+            query += " AND source = ?"
+            params.append(source)
+
+        order = "ASC" if oldest_first else "DESC"
+        query += f" ORDER BY timestamp {order}"
+
+        if limit:
+            query += " LIMIT ?"
+            params.append(limit)
+
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+
+        items = []
+        ids_to_delete = []
+        for row in rows:
+            items.append({
+                "id": row[0],
+                "source": row[1],
+                "summary": row[2],
+                "timestamp": row[3]
+            })
+            ids_to_delete.append(row[0])
+
+        # Delete the items we're returning
+        if ids_to_delete:
+            placeholders = ",".join("?" * len(ids_to_delete))
+            cursor.execute(
+                f"DELETE FROM agent_queue WHERE id IN ({placeholders})",
+                ids_to_delete
+            )
+            self.conn.commit()
+
+        return items
 
     def __enter__(self):
         """Context manager entry"""
