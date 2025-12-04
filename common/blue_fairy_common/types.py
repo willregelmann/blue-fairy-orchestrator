@@ -2,8 +2,17 @@
 
 from typing import Optional, Literal
 from enum import Enum
+from datetime import datetime
 from pydantic import BaseModel, Field, field_validator, model_validator
 from blue_fairy_common.plugin_types import PluginConfig
+
+
+class QueueItem(BaseModel):
+    """Event queue item for agent wake cycles"""
+    id: str
+    source: str       # e.g., "chat.matrix", "system", "peer.agent-123"
+    summary: str      # Human-readable summary
+    timestamp: datetime
 
 
 class AgentStatus(str, Enum):
