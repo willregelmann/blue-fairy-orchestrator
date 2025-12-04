@@ -6,7 +6,12 @@ from mcp.types import Tool, TextContent
 import logging
 import json
 import requests
+import time
+import base64
 from typing import Any
+
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+from cryptography.exceptions import InvalidSignature
 
 from .otel_client import OTelClient
 
@@ -342,13 +347,17 @@ class BlueFairyMCPServer:
                 ),
                 Tool(
                     name="queue_read",
-                    description="Read and remove items from agent's event queue. Items are popped (destructive read). Used by agents to consume events during wake cycles.",
+                    description="Read and remove items from agent's event queue. Items are popped (destructive read). Requires signature for authenticated access. Used by agents to consume events during wake cycles.",
                     inputSchema={
                         "type": "object",
                         "properties": {
                             "agent_id": {
                                 "type": "string",
                                 "description": "Agent identifier"
+                            },
+                            "signature": {
+                                "type": "string",
+                                "description": "Authentication signature (timestamp:base64_signature)"
                             },
                             "limit": {
                                 "type": "integer",
@@ -1100,6 +1109,53 @@ class BlueFairyMCPServer:
 
         return result
 
+    def _verify_agent_signature(self, agent_id: str, signature: str) -> bool:
+        """Verify agent's signature for queue access.
+
+        Args:
+            agent_id: Agent identifier
+            signature: Signature in format "timestamp:base64_signature"
+
+        Returns:
+            True if signature is valid, False otherwise
+        """
+        try:
+            # Get agent's public key
+            agent = self.state_manager.get_agent(agent_id)
+            if not agent or not agent.public_key:
+                return False
+
+            # Parse signature
+            parts = signature.split(":", 1)
+            if len(parts) != 2:
+                return False
+
+            timestamp_str, sig_b64 = parts
+
+            # Check timestamp is recent (within 5 minutes)
+            timestamp = int(timestamp_str)
+            now = int(time.time())
+            if abs(now - timestamp) > 300:
+                return False
+
+            # Verify signature
+            message = f"{agent_id}:{timestamp_str}".encode()
+            sig_bytes = base64.b64decode(sig_b64)
+
+            # Parse public key
+            if not agent.public_key.startswith("ed25519:"):
+                return False
+
+            pub_b64 = agent.public_key.split(":")[1]
+            pub_bytes = base64.b64decode(pub_b64)
+            public_key = Ed25519PublicKey.from_public_bytes(pub_bytes)
+
+            public_key.verify(sig_bytes, message)
+            return True
+
+        except (ValueError, InvalidSignature, IndexError):
+            return False
+
     async def _handle_queue_summary(self, arguments: dict) -> list[TextContent]:
         """Handle queue_summary tool call.
 
@@ -1132,15 +1188,16 @@ class BlueFairyMCPServer:
         )]
 
     async def _handle_queue_read(self, arguments: dict) -> list[TextContent]:
-        """Handle queue_read tool call.
+        """Handle queue_read tool call with signature verification.
 
         Args:
-            arguments: Dict with agent_id and optional filters
+            arguments: Dict with agent_id, optional signature, and optional filters
 
         Returns:
             List containing single TextContent with popped items
         """
         agent_id = arguments.get("agent_id")
+        signature = arguments.get("signature")
         limit = arguments.get("limit")
         oldest_first = arguments.get("oldest_first", True)
         source = arguments.get("source")
@@ -1157,6 +1214,20 @@ class BlueFairyMCPServer:
                 type="text",
                 text=json.dumps({"error": f"Agent '{agent_id}' not found"})
             )]
+
+        # Require signature if agent has public key
+        if agent.public_key:
+            if not signature:
+                return [TextContent(
+                    type="text",
+                    text=json.dumps({"error": "Signature required for queue access"})
+                )]
+
+            if not self._verify_agent_signature(agent_id, signature):
+                return [TextContent(
+                    type="text",
+                    text=json.dumps({"error": "Invalid signature"})
+                )]
 
         items = self.state_manager.pop_queue_items(
             agent_id=agent_id,
